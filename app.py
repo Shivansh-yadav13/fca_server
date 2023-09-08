@@ -13,36 +13,32 @@ app = Flask(__name__)
 # Load your pre-trained model here
 model = tf.keras.models.load_model("model_keras.h5")
 
-def fetch_audio_from_twitch(url, temp_audio_file_name):
+def fetch_audio_from_twitch(url):
+    fd, temp_audio_file_path = tempfile.mkstemp(suffix=".mp3")
+    file_name = os.path.basename(temp_audio_file_path)
+    os.close(fd)
     try:
         streams = streamlink.streams(url)
         if "audio" in streams:
             print("Inside IF Audio")
             audio_url = streams["audio"].url
             print("Audio URL:", audio_url)
-            os.system(f"ffmpeg -i {audio_url} -vn -acodec mp3 -t 3600 {temp_audio_file_name}")
+            os.system(f"ffmpeg -i {audio_url} -vn -acodec mp3 -t 3600 {file_name}")
             # os.system(f"ffmpeg -ss 01:20:00 -i {audio_url} -vn -acodec mp3 -t 600 {temp_audio_file_name}")
-            return AudioSegment.from_file(temp_audio_file_name, format="mp3")
+            audio_segment = AudioSegment.from_file(file_name, format="mp3")
+            try:
+                os.remove(file_name)
+                print(f"File '{file_name}' has been removed.")
+            except FileNotFoundError:
+                print(f"File '{file_name}' does not exist.")
+            except Exception as e:
+                print(f"An error occurred while trying to remove '{file_name}': {str(e)}")
+            return audio_segment
         else:
             return None
     except Exception as e:
         return None
-#
-# def fetch_audio_from_twitch(url):
-#     try:
-#         streams = streamlink.streams(url)
-#         if "audio" in streams:
-#             print("Inside IF Audio")
-#             audio_url = streams["audio"].url
-#             print("Audio URL:", audio_url)
-#             audio_stream = os.popen(f"ffmpeg -i {audio_url} -vn -acodec mp3 -t 3600")
-#             audio_data = audio_stream.read()
-#             audio_stream.close()
-#             return AudioSegment.from_mp3(BytesIO(audio_data.encode()))
-#         else:
-#             return None
-#     except Exception as e:
-#         return None
+
 
 def split_audio(audio):
     segment_duration = 60 * 1000
@@ -80,42 +76,27 @@ def analyze_twitch_audio():
     try:
         twitch_url = request.form['twitch_url']
         if twitch_url:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_audio_file:
-                file_name = temp_audio_file.name
-                temp_audio_file.close()
-                audio = fetch_audio_from_twitch(twitch_url, file_name)
-                print("Audio Fetched")
-                print(audio)
-                temp_dir_path = tempfile.gettempdir()
-                file_to_remove = os.path.join(temp_dir_path, file_name)
-                try:
-                    os.remove(file_to_remove)
-                    print(f"File '{file_to_remove}' has been removed.")
-                except FileNotFoundError:
-                    print(f"File '{file_to_remove}' does not exist.")
-                except Exception as e:
-                    print(f"An error occurred while trying to remove '{file_to_remove}': {str(e)}")
-                if audio:
-                    audio_samples = split_audio(audio)
-                    sample_features = feature_extraction(audio_samples)
-
-                    predictions = []
-
-                    for i, x in enumerate(sample_features):
-                        pred = model.predict(x)
-                        is_funny = pred[0][0] > pred[0][1]
-                        predictions.append({
-                            "section": f"{i}:00 - {i + 1}:00",
-                            "is_funny": bool(is_funny),
-                            "funniness_score": float(pred[0][0]),
-                            "boringness_score": float(pred[0][1]),
-                        })
-
-                    return jsonify(predictions)
-                else:
-                    return jsonify({"error": "Failed to fetch audio from the Twitch URL"})
+            audio = fetch_audio_from_twitch(twitch_url)
+            print(audio)
+            if audio:
+                audio_samples = split_audio(audio)
+                sample_features = feature_extraction(audio_samples)
+                predictions = []
+                for i, x in enumerate(sample_features):
+                    pred = model.predict(x)
+                    is_funny = pred[0][0] > pred[0][1]
+                    predictions.append({
+                        "section": f"{i}:00 - {i + 1}:00",
+                        "is_funny": bool(is_funny),
+                        "funniness_score": float(pred[0][0]),
+                        "boringness_score": float(pred[0][1]),
+                    })
+                return jsonify(predictions)
+            else:
+                return jsonify({"error": "Failed to fetch audio from the Twitch URL"})
         else:
             return jsonify({"error": "No Twitch URL provided"})
+
     except Exception as e:
         return jsonify({"error": str(e)})
 

@@ -1,0 +1,6 @@
+Flask
+librosa
+numpy
+pydub
+streamlink
+tensorflow
