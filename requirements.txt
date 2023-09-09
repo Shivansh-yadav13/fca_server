@@ -1,6 +1,6 @@
-Flask
-librosa
-numpy
-pydub
-streamlink
-tensorflow
+Flask==2.3.3
+librosa==0.10.1
+numpy==1.24.0
+pydub==0.25.1
+streamlink==6.1.0
+tensorflow==2.13.0

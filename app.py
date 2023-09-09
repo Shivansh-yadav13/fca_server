@@ -27,7 +27,8 @@ def fetch_audio_from_twitch(url):
             # os.system(f"ffmpeg -ss 01:20:00 -i {audio_url} -vn -acodec mp3 -t 600 {temp_audio_file_name}")
             audio_segment = AudioSegment.from_file(file_name, format="mp3")
             try:
-                os.remove(file_name)
+                temp_path = tempfile.gettempdir()
+                os.remove(os.path.join(temp_path, file_name))
                 print(f"File '{file_name}' has been removed.")
             except FileNotFoundError:
                 print(f"File '{file_name}' does not exist.")
