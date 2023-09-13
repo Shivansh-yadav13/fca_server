@@ -4,11 +4,13 @@ import tensorflow as tf
 from pydub import AudioSegment
 from io import BytesIO
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import streamlink
 import tempfile
 import os
 
 app = Flask(__name__)
+cors = CORS(app, resources={r"/analyze_video": {"origins": "http://localhost:3000"}})
 
 # Load your pre-trained model here
 model = tf.keras.models.load_model("model_keras.h5")
@@ -40,6 +42,13 @@ def fetch_audio_from_twitch(url):
     except Exception as e:
         return None
 
+
+def extract_audio_from_video(video_file):
+    try:
+        audio = AudioSegment.from_file(video_file, format="mp4")  # You can adjust the format as needed
+        return audio
+    except Exception as e:
+        raise e
 
 def split_audio(audio):
     segment_duration = 60 * 1000
@@ -101,6 +110,36 @@ def analyze_twitch_audio():
     except Exception as e:
         return jsonify({"error": str(e)})
 
+@app.route('/analyze_video', methods=['POST'])
+def analyze_video():
+    try:
+        video_file = request.files['video']
+        if video_file:
+            # Extract audio from the uploaded video file
+            video_bytes = video_file.read()
+            audio = extract_audio_from_video(BytesIO(video_bytes))
+
+            # Split the audio into segments and process them
+            audio_samples = split_audio(audio)
+            sample_features = feature_extraction(audio_samples)
+
+            predictions = []
+
+            for i, x in enumerate(sample_features):
+                # Assuming you have a trained model for audio analysis
+                pred = model.predict(x)
+                is_funny = pred[0][0] > pred[0][1]
+                predictions.append({
+                    "section": f"{i}:00 - {i + 1}:00",
+                    "is_funny": bool(is_funny),
+                    "funniness_score": float(pred[0][0]),
+                    "boringness_score": float(pred[0][1]),
+                })
+            return jsonify(predictions)
+        else:
+            return jsonify({"error": "No video file provided"})
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 @app.route('/analyze_audio', methods=['POST'])
 def analyze_audio():

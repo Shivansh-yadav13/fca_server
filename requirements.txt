@@ -5,3 +5,4 @@ pydub==0.25.1
 streamlink==6.1.0
 tensorflow==2.13.0
 gunicorn==21.2.0
+Flask-CORS==4.0.0
