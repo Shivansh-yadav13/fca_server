@@ -10,7 +10,7 @@ import tempfile
 import os
 
 app = Flask(__name__)
-cors = CORS(app, resources={r"/analyze_video": {"origins": "http://localhost:3000"}})
+cors = CORS(app, resources={r"/analyze_video": {"origins": ["http://localhost:3000", "https://fusionclips.pro"]}})
 
 # Load your pre-trained model here
 model = tf.keras.models.load_model("model_keras.h5")
@@ -135,6 +135,7 @@ def analyze_video():
                     "funniness_score": float(pred[0][0]),
                     "boringness_score": float(pred[0][1]),
                 })
+            print(predictions)
             return jsonify(predictions)
         else:
             return jsonify({"error": "No video file provided"})
