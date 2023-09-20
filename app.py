@@ -10,7 +10,15 @@ import tempfile
 import os
 
 app = Flask(__name__)
-cors = CORS(app, resources={r"/analyze_video": {"origins": ["http://localhost:3000", "https://fusionclips.pro"]}})
+cors = CORS(app,
+            resources={
+                r"/analyze_video": {
+                    "origins": ["http://localhost:3000", "https://fusionclips.pro"]
+                },
+                r"/analyze_twitch_audio": {
+                    "origins": ["http://localhost:3000", "https://fusionclips.pro"]
+                }
+            })
 
 # Load your pre-trained model here
 model = tf.keras.models.load_model("model_keras.h5")
