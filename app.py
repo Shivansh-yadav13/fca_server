@@ -25,7 +25,7 @@ def fetch_audio_from_twitch(url):
             print("Inside IF Audio")
             audio_url = streams["audio"].url
             print("Audio URL:", audio_url)
-            os.system(f"ffmpeg -i {audio_url} -vn -acodec mp3 -t 3600 {file_name}")
+            os.system(f"ffmpeg -i {audio_url} -vn -acodec mp3 -t 10800 {file_name}")
             # os.system(f"ffmpeg -ss 01:20:00 -i {audio_url} -vn -acodec mp3 -t 600 {temp_audio_file_name}")
             audio_segment = AudioSegment.from_file(file_name, format="mp3")
             try:
