@@ -104,11 +104,15 @@ def analyze_twitch_audio():
                     pred = model.predict(x)
                     is_funny = pred[0][0] > pred[0][1]
                     predictions.append({
-                        "section": f"{i}:00 - {i + 1}:00",
+                        "time_stamp": i*60,
                         "is_funny": bool(is_funny),
                         "funniness_score": float(pred[0][0]),
                         "boringness_score": float(pred[0][1]),
                     })
+                    # add another model (gaming/shooting detection wala)
+                    # if the is_funny -> false, then pass it through the shooting model
+                    # and then if that has engagement then pass clip
+                    # also a tag will be passed to enable or disable shooting model prediction
                 return jsonify(predictions)
             else:
                 return jsonify({"error": "Failed to fetch audio from the Twitch URL"})
