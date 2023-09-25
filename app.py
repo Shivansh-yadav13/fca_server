@@ -6,6 +6,7 @@ from io import BytesIO
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import streamlink
+import subprocess
 import tempfile
 import os
 
@@ -24,27 +25,15 @@ cors = CORS(app,
 model = tf.keras.models.load_model("model_keras.h5")
 
 def fetch_audio_from_twitch(url):
-    fd, temp_audio_file_path = tempfile.mkstemp(suffix=".mp3")
-    file_name = os.path.basename(temp_audio_file_path)
-    os.close(fd)
     try:
         streams = streamlink.streams(url)
         if "audio" in streams:
-            print("Inside IF Audio")
             audio_url = streams["audio"].url
-            print("Audio URL:", audio_url)
-            os.system(f"ffmpeg -i {audio_url} -vn -acodec mp3 -t 3600 {file_name}")
+            cmd = f"ffmpeg -i {audio_url} -vn -acodec mp3 -t 3600 -f mp3 -"
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+            audio_data, _ = process.communicate()
             # os.system(f"ffmpeg -ss 01:20:00 -i {audio_url} -vn -acodec mp3 -t 600 {temp_audio_file_name}")
-            audio_segment = AudioSegment.from_file(file_name, format="mp3")
-            try:
-                temp_path = tempfile.gettempdir()
-                os.remove(os.path.join(temp_path, file_name))
-                print(f"File '{file_name}' has been removed.")
-            except FileNotFoundError:
-                print(f"File '{file_name}' does not exist.")
-            except Exception as e:
-                print(f"An error occurred while trying to remove '{file_name}': {str(e)}")
-            return audio_segment
+            return audio_data
         else:
             return None
     except Exception as e:
@@ -57,6 +46,27 @@ def extract_audio_from_video(video_file):
         return audio
     except Exception as e:
         raise e
+
+def split_twitch_audio(audio_data):
+    segment_duration = 60 * 1000  # 60 seconds in milliseconds
+    audio = AudioSegment.from_mp3(BytesIO(audio_data))
+
+    # Set sample width to 2 bytes for 16-bit PCM audio (floating-point format)
+    audio = audio.set_sample_width(2)
+
+    # Split the audio into segments
+    segments = []
+    for start_time in range(0, len(audio), segment_duration):
+        end_time = start_time + segment_duration
+        segment = audio[start_time:end_time]
+
+        segment_bytesio = BytesIO()
+        segment.export(segment_bytesio, format="wav")
+        segment_bytesio.seek(0)
+
+        segments.append(segment_bytesio)
+
+    return segments
 
 def split_audio(audio):
     segment_duration = 60 * 1000
@@ -77,9 +87,7 @@ def feature_extraction(audio_samples):
     features = []
 
     for audio_sample in audio_samples:
-        audio = librosa.load(audio_sample)
-        sample = audio[0]
-        sample_rate = audio[1]
+        sample, sample_rate = librosa.load(audio_sample)
         zero_cross_feat = librosa.feature.zero_crossing_rate(sample).mean()
         mfccs = librosa.feature.mfcc(y=sample, sr=sample_rate, n_mfcc=40)
         mfccsscaled = np.mean(mfccs.T, axis=0)
@@ -95,9 +103,8 @@ def analyze_twitch_audio():
         twitch_url = request.form['twitch_url']
         if twitch_url:
             audio = fetch_audio_from_twitch(twitch_url)
-            print(audio)
             if audio:
-                audio_samples = split_audio(audio)
+                audio_samples = split_twitch_audio(audio)
                 sample_features = feature_extraction(audio_samples)
                 predictions = []
                 for i, x in enumerate(sample_features):
