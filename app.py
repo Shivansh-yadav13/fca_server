@@ -1,3 +1,5 @@
+import json
+
 import librosa
 import numpy as np
 import tensorflow as tf
@@ -24,12 +26,12 @@ cors = CORS(app,
 # Load your pre-trained model here
 model = tf.keras.models.load_model("model_keras.h5")
 
-def fetch_audio_from_twitch(url):
+def fetch_audio_from_twitch(url, start_timestamps):
     try:
         streams = streamlink.streams(url)
         if "audio" in streams:
             audio_url = streams["audio"].url
-            cmd = f"ffmpeg -i {audio_url} -vn -acodec mp3 -t 3600 -f mp3 -"
+            cmd = f"ffmpeg -ss {start_timestamps['hour']}:{start_timestamps['min']}:{start_timestamps['sec']} -i {audio_url} -vn -acodec mp3 -t 3600 -f mp3 -"
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
             audio_data, _ = process.communicate()
             # os.system(f"ffmpeg -ss 01:20:00 -i {audio_url} -vn -acodec mp3 -t 600 {temp_audio_file_name}")
@@ -101,8 +103,11 @@ def feature_extraction(audio_samples):
 def analyze_twitch_audio():
     try:
         twitch_url = request.form['twitch_url']
+        start_timestamps = request.form['start_timestamps']
+        start_timestamps = json.loads(start_timestamps)
+        start_time_secs = (start_timestamps['hour'] * 60 * 60) + (start_timestamps['min'] * 60) + start_timestamps['sec']
         if twitch_url:
-            audio = fetch_audio_from_twitch(twitch_url)
+            audio = fetch_audio_from_twitch(twitch_url, start_timestamps)
             if audio:
                 audio_samples = split_twitch_audio(audio)
                 sample_features = feature_extraction(audio_samples)
@@ -111,7 +116,7 @@ def analyze_twitch_audio():
                     pred = model.predict(x)
                     is_funny = pred[0][0] > pred[0][1]
                     predictions.append({
-                        "time_stamp": i*60,
+                        "time_stamp": (i*60) + start_time_secs,
                         "is_funny": bool(is_funny),
                         "funniness_score": float(pred[0][0]),
                         "boringness_score": float(pred[0][1]),
@@ -154,7 +159,6 @@ def analyze_video():
                     "funniness_score": float(pred[0][0]),
                     "boringness_score": float(pred[0][1]),
                 })
-            print(predictions)
             return jsonify(predictions)
         else:
             return jsonify({"error": "No video file provided"})
