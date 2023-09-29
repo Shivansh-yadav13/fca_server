@@ -1,5 +1,6 @@
 import json
 
+import flask
 import librosa
 import numpy as np
 import tensorflow as tf
@@ -9,8 +10,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import streamlink
 import subprocess
-import tempfile
-import os
+import base64
 
 app = Flask(__name__)
 cors = CORS(app,
@@ -20,6 +20,9 @@ cors = CORS(app,
                 },
                 r"/analyze_twitch_audio": {
                     "origins": ["http://localhost:3000", "https://fusionclips.pro"]
+                },
+                r"/download_clip": {
+                    "origins": ['http://localhost:3000', 'https://fusionclips.pro']
                 }
             })
 
@@ -193,7 +196,28 @@ def analyze_audio():
     except Exception as e:
         return jsonify({"error": str(e)})
 
+@app.route('/download_clip', methods=['POST'])
+def download_clip():
+    url = request.form['twitch_url']
+    start_seconds = request.form['start_timestamps_sec']
+    start_seconds = int(start_seconds)
+    end_seconds = start_seconds + 60
+    hours = start_seconds // 3600
+    minutes = (start_seconds % 3600) // 60
+    secs = start_seconds % 60
+    hours_end = end_seconds // 3600
+    minutes_end = (end_seconds % 3600) // 60
+    secs_end = end_seconds % 60
+    streams = streamlink.streams(url)
+    if "720p60" in streams:
+        video_url = streams["720p60"].url
+        cmd = f"ffmpeg -ss {hours:02d}:{minutes:02d}:{secs:02d} -to {hours_end:02d}:{minutes_end:02d}:{secs_end:02d} -i {video_url} -c:v copy -c:a aac -strict experimental -f avi -"
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+        video_data, error = process.communicate()
 
+        video_data_base64 = base64.b64encode(video_data).decode('utf-8')
+        response = flask.Response(response=video_data_base64, content_type='application/octet-stream')
+        return response
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
