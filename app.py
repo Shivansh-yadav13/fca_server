@@ -1,5 +1,5 @@
 import json
-
+import logging
 import flask
 import librosa
 import numpy as np
@@ -11,6 +11,16 @@ from flask_cors import CORS
 import streamlink
 import subprocess
 import base64
+from supabase import create_client, Client
+import multiprocessing
+
+logging.basicConfig(level=logging.DEBUG)
+
+url: str = "https://mzwpeqplxjiupysnwteo.supabase.co"
+# key: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16d3BlcXBseGppdXB5c253dGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE2ODk4NDU0MDcsImV4cCI6MjAwNTQyMTQwN30.ZZSitauT3217SCR4d77BeBht9SrWwMONI3ZllnHLTwA"
+key:str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16d3BlcXBseGppdXB5c253dGVvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTY4OTg0NTQwNywiZXhwIjoyMDA1NDIxNDA3fQ.a0eJivohqCWLBwc0ntZ43uZGf-_sfK6z0KFSwkhOTcg"
+
+supabase: Client = create_client(url, key)
 
 app = Flask(__name__)
 cors = CORS(app,
@@ -102,38 +112,39 @@ def feature_extraction(audio_samples):
 
     return features
 
+
+def background_processing(twitch_url, start_timestamps, start_time_secs, user_id):
+    if twitch_url:
+        audio = fetch_audio_from_twitch(twitch_url, start_timestamps)
+        if audio:
+            audio_samples = split_twitch_audio(audio)
+            sample_features = feature_extraction(audio_samples)
+            predictions = []
+            for i, x in enumerate(sample_features):
+                pred = model.predict(x)
+                is_funny = pred[0][0] > pred[0][1]
+                if (bool(is_funny)):
+                    predictions.append({
+                        "time_stamp": (i * 60) + start_time_secs,
+                        "is_funny": bool(is_funny),
+                        "funniness_score": float(pred[0][0]),
+                        "boringness_score": float(pred[0][1]),
+                    })
+            data, count = supabase.table('users').update({"last_request_data": predictions}).eq("id", user_id).execute()
+            some_res = supabase.table('users').update({"server_busy_status": False}).eq("id", user_id).execute()
+
 @app.route('/analyze_twitch_audio', methods=['POST'])
 def analyze_twitch_audio():
     try:
         twitch_url = request.form['twitch_url']
         start_timestamps = request.form['start_timestamps']
+        user_id = request.form['user_id']
         start_timestamps = json.loads(start_timestamps)
         start_time_secs = (start_timestamps['hour'] * 60 * 60) + (start_timestamps['min'] * 60) + start_timestamps['sec']
-        if twitch_url:
-            audio = fetch_audio_from_twitch(twitch_url, start_timestamps)
-            if audio:
-                audio_samples = split_twitch_audio(audio)
-                sample_features = feature_extraction(audio_samples)
-                predictions = []
-                for i, x in enumerate(sample_features):
-                    pred = model.predict(x)
-                    is_funny = pred[0][0] > pred[0][1]
-                    predictions.append({
-                        "time_stamp": (i*60) + start_time_secs,
-                        "is_funny": bool(is_funny),
-                        "funniness_score": float(pred[0][0]),
-                        "boringness_score": float(pred[0][1]),
-                    })
-                    # add another model (gaming/shooting detection wala)
-                    # if the is_funny -> false, then pass it through the shooting model
-                    # and then if that has engagement then pass clip
-                    # also a tag will be passed to enable or disable shooting model prediction
-                return jsonify(predictions)
-            else:
-                return jsonify({"error": "Failed to fetch audio from the Twitch URL"})
-        else:
-            return jsonify({"error": "No Twitch URL provided"})
-
+        some_res = supabase.table('users').update({"server_busy_status": True}).eq("id", user_id).execute()
+        background_process = multiprocessing.Process(target=background_processing, args=(twitch_url, start_timestamps, start_time_secs, user_id))
+        background_process.start()
+        return jsonify({"message": "Background Task started"})
     except Exception as e:
         return jsonify({"error": str(e)})
 
@@ -220,4 +231,4 @@ def download_clip():
         return response
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)
