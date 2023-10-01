@@ -141,6 +141,7 @@ def analyze_twitch_audio():
         start_timestamps = json.loads(start_timestamps)
         start_time_secs = (start_timestamps['hour'] * 60 * 60) + (start_timestamps['min'] * 60) + start_timestamps['sec']
         some_res = supabase.table('users').update({"server_busy_status": True}).eq("id", user_id).execute()
+        print("Starting the background process")
         background_process = multiprocessing.Process(target=background_processing, args=(twitch_url, start_timestamps, start_time_secs, user_id))
         background_process.start()
         return jsonify({"message": "Background Task started"})
