@@ -1,5 +1,4 @@
 import json
-import logging
 import flask
 import librosa
 import numpy as np
@@ -13,8 +12,6 @@ import subprocess
 import base64
 from supabase import create_client, Client
 import multiprocessing
-
-logging.basicConfig(level=logging.DEBUG)
 
 url: str = "https://mzwpeqplxjiupysnwteo.supabase.co"
 # key: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16d3BlcXBseGppdXB5c253dGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE2ODk4NDU0MDcsImV4cCI6MjAwNTQyMTQwN30.ZZSitauT3217SCR4d77BeBht9SrWwMONI3ZllnHLTwA"
@@ -44,7 +41,7 @@ def fetch_audio_from_twitch(url, start_timestamps):
         streams = streamlink.streams(url)
         if "audio" in streams:
             audio_url = streams["audio"].url
-            cmd = f"ffmpeg -ss {start_timestamps['hour']}:{start_timestamps['min']}:{start_timestamps['sec']} -i {audio_url} -vn -acodec mp3 -t 300 -f mp3 -"
+            cmd = f"ffmpeg -ss {start_timestamps['hour']}:{start_timestamps['min']}:{start_timestamps['sec']} -i {audio_url} -vn -acodec mp3 -t 3600 -f mp3 -"
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
             audio_data, _ = process.communicate()
             # os.system(f"ffmpeg -ss 01:20:00 -i {audio_url} -vn -acodec mp3 -t 600 {temp_audio_file_name}")
@@ -114,12 +111,14 @@ def feature_extraction(audio_samples):
 
 
 def background_processing(twitch_url, start_timestamps, start_time_secs, user_id):
+    print("background processing started!")
     if twitch_url:
         audio = fetch_audio_from_twitch(twitch_url, start_timestamps)
         if audio:
             audio_samples = split_twitch_audio(audio)
             sample_features = feature_extraction(audio_samples)
             predictions = []
+            print("background processing in progress")
             for i, x in enumerate(sample_features):
                 pred = model.predict(x)
                 is_funny = pred[0][0] > pred[0][1]
@@ -231,4 +230,4 @@ def download_clip():
         return response
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000)
