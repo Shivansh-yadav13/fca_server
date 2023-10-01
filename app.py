@@ -34,7 +34,7 @@ def fetch_audio_from_twitch(url, start_timestamps):
         streams = streamlink.streams(url)
         if "audio" in streams:
             audio_url = streams["audio"].url
-            cmd = f"ffmpeg -ss {start_timestamps['hour']}:{start_timestamps['min']}:{start_timestamps['sec']} -i {audio_url} -vn -acodec mp3 -t 3600 -f mp3 -"
+            cmd = f"ffmpeg -ss {start_timestamps['hour']}:{start_timestamps['min']}:{start_timestamps['sec']} -i {audio_url} -vn -acodec mp3 -t 300 -f mp3 -"
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
             audio_data, _ = process.communicate()
             # os.system(f"ffmpeg -ss 01:20:00 -i {audio_url} -vn -acodec mp3 -t 600 {temp_audio_file_name}")
