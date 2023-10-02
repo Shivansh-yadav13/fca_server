@@ -11,7 +11,7 @@ import streamlink
 import subprocess
 import base64
 from supabase import create_client, Client
-import multiprocessing
+import threading
 
 url: str = "https://mzwpeqplxjiupysnwteo.supabase.co"
 # key: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16d3BlcXBseGppdXB5c253dGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE2ODk4NDU0MDcsImV4cCI6MjAwNTQyMTQwN30.ZZSitauT3217SCR4d77BeBht9SrWwMONI3ZllnHLTwA"
@@ -129,8 +129,8 @@ def background_processing(twitch_url, start_timestamps, start_time_secs, user_id
                         "funniness_score": float(pred[0][0]),
                         "boringness_score": float(pred[0][1]),
                     })
-            data, count = supabase.table('users').update({"last_request_data": predictions}).eq("id", user_id).execute()
-            some_res = supabase.table('users').update({"server_busy_status": False}).eq("id", user_id).execute()
+            supabase.table('users').update({"last_request_data": predictions}).eq("id", user_id).execute()
+            supabase.table('users').update({"server_busy_status": False}).eq("id", user_id).execute()
 
 @app.route('/analyze_twitch_audio', methods=['POST'])
 def analyze_twitch_audio():
@@ -142,7 +142,7 @@ def analyze_twitch_audio():
         start_time_secs = (start_timestamps['hour'] * 60 * 60) + (start_timestamps['min'] * 60) + start_timestamps['sec']
         some_res = supabase.table('users').update({"server_busy_status": True}).eq("id", user_id).execute()
         print("Starting the background process")
-        background_process = multiprocessing.Process(target=background_processing, args=(twitch_url, start_timestamps, start_time_secs, user_id))
+        background_process = threading.Thread(target=background_processing, args=(twitch_url, start_timestamps, start_time_secs, user_id))
         background_process.start()
         return jsonify({"message": "Background Task started"})
     except Exception as e:
@@ -231,4 +231,4 @@ def download_clip():
         return response
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=8080)
