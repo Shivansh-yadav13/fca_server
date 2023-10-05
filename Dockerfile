@@ -8,6 +8,4 @@ RUN set -x && apt-get update && apt-get dist-upgrade -y && apt-get install -y --
 
 COPY . .
 
-EXPOSE 5000
-
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "0", "--workers", "4", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "--timeout", "0", "--workers", "4", "app:app"]
