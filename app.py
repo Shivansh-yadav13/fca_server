@@ -129,8 +129,13 @@ def background_processing(twitch_url, start_timestamps, start_time_secs, user_id
                         "funniness_score": float(pred[0][0]),
                         "boringness_score": float(pred[0][1]),
                     })
-            supabase.table('users').update({"last_request_data": predictions}).eq("id", user_id).execute()
+            last_request_data = supabase.table('users').select('last_request_data').eq('id', user_id).execute()
             supabase.table('users').update({"server_busy_status": False}).eq("id", user_id).execute()
+            print(last_request_data)
+            last_request_data = last_request_data.data[0]['last_request_data']
+            last_request_data['last_clips'] = predictions
+            supabase.table('users').update({"last_request_data": last_request_data}).eq("id", user_id).execute()
+
 
 @app.route('/analyze_twitch_audio', methods=['POST'])
 def analyze_twitch_audio():
