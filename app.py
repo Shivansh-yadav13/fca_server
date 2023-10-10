@@ -227,7 +227,11 @@ def download_clip():
     streams = streamlink.streams(url)
     if "720p60" in streams:
         video_url = streams["720p60"].url
-        cmd = f"ffmpeg -ss {hours:02d}:{minutes:02d}:{secs:02d} -to {hours_end:02d}:{minutes_end:02d}:{secs_end:02d} -i {video_url} -c:v copy -c:a aac -strict experimental -f avi -"
+        # cmd = f"ffmpeg -ss {hours:02d}:{minutes:02d}:{secs:02d} -i {video_url} -t 60 -c:v copy -c:a aac -async 1 -strict experimental -f avi -"
+        # cmd = f"ffmpeg -ss {hours:02d}:{minutes:02d}:{secs:02d} -i {video_url} -t 60 -c:v libvpx -c:a libvorbis -async 1 -f webm -"
+        # cmd = f"ffmpeg -ss {hours:02d}:{minutes:02d}:{secs:02d} -i {video_url} -t 60 -c:v copy -c:a aac -async 1 -f matroska -"
+        # cmd = f"ffmpeg -ss {hours:02d}:{minutes:02d}:{secs:02d} -i {video_url} -t 60 -c:v wmv2 -c:a wmav2 -async 1 -f asf -"
+        cmd = f"ffmpeg -ss {hours:02d}:{minutes:02d}:{secs:02d} -i {video_url} -t 60 -c:v libx264 -c:a aac -async 1 -f flv -"
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         video_data, error = process.communicate()
 
