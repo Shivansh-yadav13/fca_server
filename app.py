@@ -36,15 +36,22 @@ cors = CORS(app,
 # Load your pre-trained model here
 model = tf.keras.models.load_model("model_keras.h5")
 
-def fetch_audio_from_twitch(url, start_timestamps):
+def fetch_audio_from_url(platform, url, start_timestamps):
     try:
-        streams = streamlink.streams(url)
-        if "audio" in streams:
-            audio_url = streams["audio"].url
-            cmd = f"ffmpeg -ss {start_timestamps['hour']}:{start_timestamps['min']}:{start_timestamps['sec']} -i {audio_url} -vn -acodec mp3 -t 3600 -f mp3 -"
+        if platform == 'twitch':
+            streams = streamlink.streams(url)
+            if "audio" in streams:
+                audio_url = streams["audio"].url
+                cmd = f"ffmpeg -ss {start_timestamps['hour']:02d}:{start_timestamps['min']:02d}:{start_timestamps['sec']:02d} -i {audio_url} -vn -acodec mp3 -t 3600 -f mp3 -"
+                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+                audio_data, _ = process.communicate()
+                return audio_data
+            else:
+                return None
+        elif platform == 'kick':
+            cmd = f"ffmpeg -ss {start_timestamps['hour']:02d}:{start_timestamps['min']:02d}:{start_timestamps['sec']:02d} -i {url} -vn -acodec mp3 -t 3600 -f mp3 -"
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
             audio_data, _ = process.communicate()
-            # os.system(f"ffmpeg -ss 01:20:00 -i {audio_url} -vn -acodec mp3 -t 600 {temp_audio_file_name}")
             return audio_data
         else:
             return None
@@ -59,7 +66,7 @@ def extract_audio_from_video(video_file):
     except Exception as e:
         raise e
 
-def split_twitch_audio(audio_data):
+def split_audio_v2(audio_data):
     segment_duration = 60 * 1000  # 60 seconds in milliseconds
     audio = AudioSegment.from_mp3(BytesIO(audio_data))
 
@@ -110,31 +117,29 @@ def feature_extraction(audio_samples):
     return features
 
 
-def background_processing(twitch_url, start_timestamps, start_time_secs, user_id):
-    print("background processing started!")
-    if twitch_url:
-        audio = fetch_audio_from_twitch(twitch_url, start_timestamps)
-        if audio:
-            audio_samples = split_twitch_audio(audio)
-            sample_features = feature_extraction(audio_samples)
-            predictions = []
-            print("background processing in progress")
-            for i, x in enumerate(sample_features):
-                pred = model.predict(x)
-                is_funny = pred[0][0] > pred[0][1]
-                if (bool(is_funny)):
-                    predictions.append({
-                        "time_stamp": (i * 60) + start_time_secs,
-                        "is_funny": bool(is_funny),
-                        "funniness_score": float(pred[0][0]),
-                        "boringness_score": float(pred[0][1]),
-                    })
-            last_request_data = supabase.table('users').select('last_request_data').eq('id', user_id).execute()
-            supabase.table('users').update({"server_busy_status": False}).eq("id", user_id).execute()
-            print(last_request_data)
-            last_request_data = last_request_data.data[0]['last_request_data']
-            last_request_data['last_clips'] = predictions
-            supabase.table('users').update({"last_request_data": last_request_data}).eq("id", user_id).execute()
+def background_processing(platform, url, start_timestamps, start_time_secs, user_id):
+    audio = fetch_audio_from_url(platform, url, start_timestamps)
+    if audio:
+        audio_samples = split_audio_v2(audio)
+        sample_features = feature_extraction(audio_samples)
+        predictions = []
+        print("background processing in progress")
+        for i, x in enumerate(sample_features):
+            pred = model.predict(x)
+            is_funny = pred[0][0] > pred[0][1]
+            if (bool(is_funny)):
+                predictions.append({
+                    "time_stamp": (i * 60) + start_time_secs,
+                    "is_funny": bool(is_funny),
+                    "funniness_score": float(pred[0][0]),
+                    "boringness_score": float(pred[0][1]),
+                })
+        last_request_data = supabase.table('users').select('last_request_data').eq('id', user_id).execute()
+        supabase.table('users').update({"server_busy_status": False}).eq("id", user_id).execute()
+        print(last_request_data)
+        last_request_data = last_request_data.data[0]['last_request_data']
+        last_request_data['last_clips'] = predictions
+        supabase.table('users').update({"last_request_data": last_request_data}).eq("id", user_id).execute()
 
 
 @app.route('/analyze_twitch_audio', methods=['POST'])
@@ -147,11 +152,26 @@ def analyze_twitch_audio():
         start_time_secs = (start_timestamps['hour'] * 60 * 60) + (start_timestamps['min'] * 60) + start_timestamps['sec']
         some_res = supabase.table('users').update({"server_busy_status": True}).eq("id", user_id).execute()
         print("Starting the background process")
-        background_process = threading.Thread(target=background_processing, args=(twitch_url, start_timestamps, start_time_secs, user_id))
+        background_process = threading.Thread(target=background_processing, args=("twitch", twitch_url, start_timestamps, start_time_secs, user_id))
         background_process.start()
         return jsonify({"message": "Background Task started"})
     except Exception as e:
         return jsonify({"error": str(e)})
+
+@app.route('/analyze_kick_audio', methods=['POST'])
+def analyze_kick_audio():
+    try:
+        kick_m3u8_url = request.form['kick_m3u8_url']
+        start_timestamps = request.form['start_timestamps']
+        user_id = request.form['user_id']
+        start_timestamps = json.loads(start_timestamps)
+        start_time_secs = (start_timestamps['hour'] * 60 * 60) + (start_timestamps['min'] * 60) + start_timestamps['sec']
+        some_res = supabase.table('users').update({"server_busy_status": True}).eq("id", user_id).execute()
+        background_process = threading.Thread(target=background_processing, args=("kick", kick_m3u8_url, start_timestamps, start_time_secs, user_id))
+        background_process.start()
+        return jsonify({"message": "Background Task started"})
+    except Exception as e:
+        return jsonify({'error': str(e)})
 
 @app.route('/analyze_video', methods=['POST'])
 def analyze_video():
