@@ -2,6 +2,7 @@ import json
 import flask
 import librosa
 import numpy as np
+from pytube import YouTube
 import tensorflow as tf
 from pydub import AudioSegment
 from io import BytesIO
@@ -52,6 +53,13 @@ def fetch_audio_from_url(platform, url, start_timestamps):
             cmd = f"ffmpeg -ss {start_timestamps['hour']:02d}:{start_timestamps['min']:02d}:{start_timestamps['sec']:02d} -i {url} -vn -acodec mp3 -t 3600 -f mp3 -"
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
             audio_data, _ = process.communicate()
+            return audio_data
+        elif platform == 'youtube':
+            yt = YouTube(url)
+            video = yt.streams.get_highest_resolution()
+            cmd = f'ffmpeg -ss {start_timestamps["hour"]:02d}:{start_timestamps["min"]:02d}:{start_timestamps["sec"]:02d} -i "{video.url}" -vn -acodec mp3 -t 3600 -f mp3 pipe:1'
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+            audio_data, error_data = process.communicate()
             return audio_data
         else:
             return None
@@ -160,7 +168,7 @@ def analyze_twitch_audio():
         user_id = request.form['user_id']
         start_timestamps = json.loads(start_timestamps)
         start_time_secs = (start_timestamps['hour'] * 60 * 60) + (start_timestamps['min'] * 60) + start_timestamps['sec']
-        some_res = supabase.table('users').update({"server_busy_status": True}).eq("id", user_id).execute()
+        supabase.table('users').update({"server_busy_status": True}).eq("id", user_id).execute()
         print("Starting the background process")
         background_process = threading.Thread(target=background_processing, args=("twitch", twitch_url, start_timestamps, start_time_secs, user_id))
         background_process.start()
@@ -176,8 +184,23 @@ def analyze_kick_audio():
         user_id = request.form['user_id']
         start_timestamps = json.loads(start_timestamps)
         start_time_secs = (start_timestamps['hour'] * 60 * 60) + (start_timestamps['min'] * 60) + start_timestamps['sec']
-        some_res = supabase.table('users').update({"server_busy_status": True}).eq("id", user_id).execute()
+        supabase.table('users').update({"server_busy_status": True}).eq("id", user_id).execute()
         background_process = threading.Thread(target=background_processing, args=("kick", kick_m3u8_url, start_timestamps, start_time_secs, user_id))
+        background_process.start()
+        return jsonify({"message": "Background Task started"})
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+@app.route('/analyze_youtube_audio', methods=['POST'])
+def analyze_youtube_audio():
+    try:
+        youtube_url = request.form['youtube_url']
+        start_timestamps = request.form['start_timestamps']
+        user_id = request.form['user_id']
+        start_timestamps = json.loads(start_timestamps)
+        start_time_secs = (start_timestamps['hour'] * 60 * 60) + (start_timestamps['min'] * 60) + start_timestamps['sec']
+        supabase.table('users').update({"server_busy_status": True}).eq("id", user_id).execute()
+        background_process = threading.Thread(target=background_processing,args=("youtube", youtube_url, start_timestamps, start_time_secs, user_id))
         background_process.start()
         return jsonify({"message": "Background Task started"})
     except Exception as e:
@@ -244,7 +267,7 @@ def analyze_audio():
 
 @app.route('/download_clip', methods=['POST'])
 def download_clip():
-    url = request.form['twitch_url']
+    url = request.form['url']
     start_seconds = request.form['start_timestamps_sec']
     start_seconds = int(start_seconds)
     end_seconds = start_seconds + 60
