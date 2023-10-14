@@ -134,12 +134,22 @@ def background_processing(platform, url, start_timestamps, start_time_secs, user
                     "funniness_score": float(pred[0][0]),
                     "boringness_score": float(pred[0][1]),
                 })
+        # Get the last request data
         last_request_data = supabase.table('users').select('last_request_data').eq('id', user_id).execute()
+        # Set Server busy status to False
         supabase.table('users').update({"server_busy_status": False}).eq("id", user_id).execute()
+
         print(last_request_data)
+
+        # Update last request data
         last_request_data = last_request_data.data[0]['last_request_data']
         last_request_data['last_clips'] = predictions
         supabase.table('users').update({"last_request_data": last_request_data}).eq("id", user_id).execute()
+
+        # Reduce trial requests
+        user_trial_requests = supabase.table('users').select('trial_requests').eq('id', user_id).execute()
+        supabase.table('users').update({"trial_requests": (user_trial_requests - 1)}).eq('id', user_id).execute()
+
 
 
 @app.route('/analyze_twitch_audio', methods=['POST'])
