@@ -15,8 +15,7 @@ from supabase import create_client, Client
 import threading
 
 url: str = "https://mzwpeqplxjiupysnwteo.supabase.co"
-# key: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16d3BlcXBseGppdXB5c253dGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE2ODk4NDU0MDcsImV4cCI6MjAwNTQyMTQwN30.ZZSitauT3217SCR4d77BeBht9SrWwMONI3ZllnHLTwA"
-key:str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16d3BlcXBseGppdXB5c253dGVvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTY4OTg0NTQwNywiZXhwIjoyMDA1NDIxNDA3fQ.a0eJivohqCWLBwc0ntZ43uZGf-_sfK6z0KFSwkhOTcg"
+key:str = os.getenv('supabase-key')
 
 supabase: Client = create_client(url, key)
 
